@@ -1,0 +1,89 @@
+name: Roblox VM (KasmVNC)
+
+on:
+  workflow_dispatch:
+    inputs:
+      session_hours:
+        description: "How many hours to keep the session alive"
+        required: false
+        default: "6"
+
+jobs:
+  run-vm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 400
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Wine, Xvfb and KasmVNC
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            wine64 wine32 xvfb x11-utils xauth net-tools curl \
+            xvfb fonts-liberation libnss3 libasound2
+          curl -fsSLo kasmvnc.deb \
+            https://github.com/kasmtech/KasmVNC/releases/download/v1.3.1/kasmvncserver_1.3.1_amd64.deb
+          sudo apt-get install -y ./kasmvnc.deb
+          sudo adduser $USER ssl-cert
+
+      - name: Configure and start KasmVNC
+        run: |
+          mkdir -p ~/.vnc
+          printf 'password\npassword\nn\n' | kasmvncpasswd -u $USER
+          cat > ~/.vnc/kasmvnc.yaml <<'EOF'
+network:
+  protocol: http
+  interface: 0.0.0.0
+  websocket_port: 6901
+  use_ipv4: true
+  ssl:
+    require_ssl: false
+server:
+  advanced:
+    kasm_password_file: ${HOME}/.kasmpasswd
+  auto_shutdown:
+    no_user_session_timeout: never
+    active_user_session_timeout: never
+    inactive_user_session_timeout: never
+EOF
+          kasmvncserver :1 -localhost no -geometry 1600x900 -depth 24 -disableBasicAuth
+          export DISPLAY=:1
+          sleep 3
+          xdpyinfo -display $DISPLAY >/dev/null 2>&1 && echo "X ready"
+
+      - name: Download and install Roblox
+        run: |
+          url="https://setup.rbxcdn.com/version-2.664.714-Roblox.exe"
+          curl -fsSLo /tmp/roblox.exe "$url"
+          WINEARCH=win64 WINEDEBUG=-all xvfb-run -a wine /tmp/roblox.exe /silent || true
+          # deterministic run requires audio and openGL libs
+          sudo apt-get install -y --no-install-recommends \
+            libgl1-mesa-glx:i386 libgl1-mesa-dri:i386 libopenal1:i386 \
+            libfontconfig1:i386 libfreetype6:i386 libgnutls30:i386 || true
+
+      - name: Launch Roblox Player behind Xvfb
+        run: |
+          export DISPLAY=:1
+          WINEDEBUG=-all wine \
+            "C:\\Program Files (x86)\\Roblox\\Versions\\version-2.664.714\\RobloxPlayerLauncher.exe" &
+          disown
+          sleep 5
+          echo "Roblox launched (may or may not render without GPU)"
+
+      - name: Expose KasmVNC through a tunnel
+        run: |
+          nohup bore local 6901 --to bore.pub > bore.log 2>&1 &
+          for i in $(seq 1 30); do
+            url=$(grep -oE 'https?://[a-zA-Z0-9.-]+' bore.log | head -n1)
+            [ -n "$url" ] && break
+            sleep 2
+          done
+          echo "VNC TUNNEL URL: $url"
+          echo "url=$url" >> "$GITHUB_ENV"
+          echo "Session will stay alive for ${{ github.event.inputs.session_hours || '6' }} hours (max 6h per GitHub Actions run)."
+
+      - name: Keep session alive
+        run: |
+          sleep $(( 3600 * ${{ github.event.inputs.session_hours || '6' }} ))

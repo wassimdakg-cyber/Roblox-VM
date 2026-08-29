@@ -1,0 +1,14 @@
+#!/bin/bash
+# Helper to show the VNC tunnel URL once the workflow is running.
+#
+# The free KasmVNC is served over HTTP on port 6901, tunnelled via bore.pub.
+# GitHub Actions itself cannot be browsed, so we rely on the tunnel.
+#
+# Print last known bore tunnel URL from the workflow run log.
+echo "To find your Roblox VM desktop:"
+echo "  1. Go to your repo -> Actions -> 'Roblox VM (KasmVNC)' -> click the run."
+echo "  2. Open the 'Expose KasmVNC through a tunnel' step."
+echo "  3. In the log look for the line starting with 'VNC TUNNEL URL:'."
+echo "  4. Open that URL in your browser. No password (basic auth disabled)."
+echo
+echo "Note: GitHub Actions sessions expire at 6 hours. No GPU = Roblox may not render."
