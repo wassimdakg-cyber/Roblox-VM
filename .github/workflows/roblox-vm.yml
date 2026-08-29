@@ -98,6 +98,18 @@ jobs:
           fi
           echo "Session will stay alive for ${{ github.event.inputs.session_hours || '6' }} hours (max 6h per GitHub Actions run)."
 
+      - name: Show VNC URL in run summary
+        run: |
+          {
+            echo "## Roblox VM is ready"
+            echo ""
+            echo "**VNC TUNNEL URL:** ${url:-<not set>}"
+            echo ""
+            echo "Open the URL in your browser. Basic auth is disabled."
+            echo ""
+            echo "> NOTE: No GPU on GitHub runners, so Roblox may open the launcher but not render the game."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Keep session alive
         run: |
           sleep $(( 3600 * ${{ github.event.inputs.session_hours || '6' }} ))
