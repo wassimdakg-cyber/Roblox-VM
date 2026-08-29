@@ -24,10 +24,10 @@ jobs:
           sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            wine64 wine32 xvfb x11-utils xauth net-tools curl \
-            xvfb fonts-liberation libnss3 libasound2
+            wine xvfb x11-utils xauth net-tools curl \
+            fonts-liberation libnss3 libasound2t64
           curl -fsSLo kasmvnc.deb \
-            https://github.com/kasmtech/KasmVNC/releases/download/v1.3.1/kasmvncserver_1.3.1_amd64.deb
+            https://github.com/kasmtech/KasmVNC/releases/download/v1.5.0/kasmvncserver_noble_1.5.0_amd64.deb
           sudo apt-get install -y ./kasmvnc.deb
           sudo adduser $USER ssl-cert
 
@@ -44,22 +44,29 @@ jobs:
 
       - name: Download and install Roblox
         run: |
-          url="https://setup.rbxcdn.com/version-2.664.714-Roblox.exe"
-          curl -fsSLo /tmp/roblox.exe "$url"
+          guid=$(curl -fsSL "https://clientsettingscdn.roblox.com/v2/client-version/WindowsPlayer" | python3 -c "import sys,json;print(json.load(sys.stdin)['clientVersionUpload'])")
+          echo "Roblox version guid: $guid"
+          echo "ROBLOX_GUID=$guid" >> "$GITHUB_ENV"
+          curl -fsSLo /tmp/roblox.exe "https://setup.rbxcdn.com/${guid}-RobloxPlayerInstaller.exe" || true
+          ls -la /tmp/roblox.exe || echo "download failed"
           WINEARCH=win64 WINEDEBUG=-all xvfb-run -a wine /tmp/roblox.exe /silent || true
           # deterministic run requires audio and openGL libs
           sudo apt-get install -y --no-install-recommends \
-            libgl1-mesa-glx:i386 libgl1-mesa-dri:i386 libopenal1:i386 \
-            libfontconfig1:i386 libfreetype6:i386 libgnutls30:i386 || true
+            libgl1:i386 libopenal1:i386 libfontconfig1:i386 libfreetype6:i386 || true
 
       - name: Launch Roblox Player behind Xvfb
         run: |
           export DISPLAY=:1
-          WINEDEBUG=-all wine \
-            "C:\\Program Files (x86)\\Roblox\\Versions\\version-2.664.714\\RobloxPlayerLauncher.exe" &
-          disown
+          version_dir=$(ls -d "$HOME"/.wine/drive_c/Program\ Files*/Roblox/Versions/* 2>/dev/null | head -n1)
+          echo "Found Roblox version dir: $version_dir"
+          if [ -n "$version_dir" ]; then
+            WINEDEBUG=-all wine "$version_dir/RobloxPlayerLauncher.exe" &
+            disown
+          else
+            echo "No Roblox version directory found - install may have failed"
+          fi
           sleep 5
-          echo "Roblox launched (may or may not render without GPU)"
+          echo "Roblox launch attempted (may not render without GPU)"
 
       - name: Expose KasmVNC through a tunnel
         run: |
